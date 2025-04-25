@@ -149,3 +149,60 @@
         (ok true)
     )
 )
+
+;; Collateral Management Functions
+
+;; Deposit BTC as collateral into a vault
+(define-public (deposit-collateral (btc-amount uint))
+    (let (
+        (sender-vault (default-to {
+            btc-locked: u0,
+            stablecoin-minted: u0,
+            last-update-height: block-height
+        } (map-get? collateral-vaults tx-sender)))
+    )
+    (begin
+        (asserts! (>= btc-amount MINIMUM-DEPOSIT) ERR-BELOW-MINIMUM)
+        (try! (transfer-balance btc-amount tx-sender (as-contract tx-sender)))
+        (map-set collateral-vaults tx-sender {
+            btc-locked: (+ btc-amount (get btc-locked sender-vault)),
+            stablecoin-minted: (get stablecoin-minted sender-vault),
+            last-update-height: block-height
+        })
+        (ok true)
+    ))
+)
+
+;; Mint stablecoins backed by deposited collateral
+(define-public (mint-stablecoin (amount uint))
+    (let (
+        (vault (unwrap! (map-get? collateral-vaults tx-sender) ERR-NOT-INITIALIZED))
+        (current-stable-balance (default-to u0 (map-get? stablecoin-balances tx-sender)))
+        (new-stable-amount (+ (get stablecoin-minted vault) amount))
+    )
+    (begin
+        (asserts! (and 
+            (> amount u0)
+            (<= amount MAX-MINT-AMOUNT)
+            (<= (+ (var-get total-supply) amount) (* (var-get pool-btc-balance) (var-get oracle-price)))
+        ) ERR-INVALID-AMOUNT)
+        (try! (check-collateral-requirement (get btc-locked vault) new-stable-amount))
+        
+        ;; Update vault
+        (map-set collateral-vaults tx-sender {
+            btc-locked: (get btc-locked vault),
+            stablecoin-minted: new-stable-amount,
+            last-update-height: block-height
+        })
+        
+        ;; Update balances safely
+        (let (
+            (new-total-supply (+ (var-get total-supply) amount))
+            (new-user-balance (+ current-stable-balance amount))
+        )
+        (asserts! (<= new-total-supply MAX-MINT-AMOUNT) ERR-ABOVE-MAXIMUM)
+        (map-set stablecoin-balances tx-sender new-user-balance)
+        (var-set total-supply new-total-supply)
+        (ok true))
+    ))
+)
