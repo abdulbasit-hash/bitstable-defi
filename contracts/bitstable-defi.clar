@@ -114,3 +114,38 @@
         (/ (* btc-amount (sqrt (* pool-btc pool-stable))) pool-btc)
     ))
 )
+
+;; Simple square root function implementation for LP token calculations
+(define-private (sqrt (x uint))
+    (let (
+        (next (+ (/ x u2) u1))
+    )
+    (if (<= x u2)
+        u1
+        next
+    ))
+)
+
+;; Protocol Administration Functions
+
+;; Initialize the protocol with initial BTC/USD price
+(define-public (initialize (initial-price uint))
+    (begin
+        (asserts! (is-eq tx-sender CONTRACT-OWNER) ERR-NOT-AUTHORIZED)
+        (asserts! (not (var-get contract-initialized)) ERR-ALREADY-INITIALIZED)
+        (asserts! (validate-price initial-price) ERR-INVALID-PRICE)
+        (var-set oracle-price initial-price)
+        (var-set contract-initialized true)
+        (ok true)
+    )
+)
+
+;; Update the BTC/USD price from oracle
+(define-public (update-price (new-price uint))
+    (begin
+        (asserts! (is-eq tx-sender CONTRACT-OWNER) ERR-NOT-AUTHORIZED)
+        (asserts! (validate-price new-price) ERR-INVALID-PRICE)
+        (var-set oracle-price new-price)
+        (ok true)
+    )
+)
