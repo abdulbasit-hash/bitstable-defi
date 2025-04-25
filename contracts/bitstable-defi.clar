@@ -158,7 +158,7 @@
         (sender-vault (default-to {
             btc-locked: u0,
             stablecoin-minted: u0,
-            last-update-height: block-height
+            last-update-height: stacks-block-height
         } (map-get? collateral-vaults tx-sender)))
     )
     (begin
@@ -167,7 +167,7 @@
         (map-set collateral-vaults tx-sender {
             btc-locked: (+ btc-amount (get btc-locked sender-vault)),
             stablecoin-minted: (get stablecoin-minted sender-vault),
-            last-update-height: block-height
+            last-update-height: stacks-block-height
         })
         (ok true)
     ))
@@ -192,7 +192,7 @@
         (map-set collateral-vaults tx-sender {
             btc-locked: (get btc-locked vault),
             stablecoin-minted: new-stable-amount,
-            last-update-height: block-height
+            last-update-height: stacks-block-height
         })
         
         ;; Update balances safely
@@ -218,7 +218,7 @@
         (map-set collateral-vaults tx-sender {
             btc-locked: (get btc-locked vault),
             stablecoin-minted: (- (get stablecoin-minted vault) amount),
-            last-update-height: block-height
+            last-update-height: stacks-block-height
         })
         (map-set stablecoin-balances tx-sender (- current-stable-balance amount))
         (var-set total-supply (- (var-get total-supply) amount))
@@ -256,4 +256,34 @@
         })
         (ok lp-tokens)
     ))
+)
+
+;; Read-only Functions
+
+;; Get details about a specific vault
+(define-read-only (get-vault-details (owner principal))
+    (map-get? collateral-vaults owner)
+)
+
+;; Get the current collateral ratio for a vault
+(define-read-only (get-collateral-ratio (owner principal))
+    (let (
+        (vault (unwrap! (map-get? collateral-vaults owner) ERR-NOT-INITIALIZED))
+    )
+    (ok (calculate-collateral-ratio (get btc-locked vault) (get stablecoin-minted vault))))
+)
+
+;; Get overall pool statistics
+(define-read-only (get-pool-details)
+    {
+        btc-balance: (var-get pool-btc-balance),
+        stable-balance: (var-get pool-stable-balance),
+        total-supply: (var-get total-supply),
+        oracle-price: (var-get oracle-price)
+    }
+)
+
+;; Get details about a specific liquidity provider
+(define-read-only (get-lp-details (provider principal))
+    (map-get? liquidity-providers provider)
 )
